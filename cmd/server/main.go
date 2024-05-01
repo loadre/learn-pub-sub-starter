@@ -6,7 +6,8 @@ import (
 	"os"
 	"os/signal"
 
-	pubsub "github.com/loadre/learn-pub-sub-starter/internal/pubsub"
+	"github.com/loadre/learn-pub-sub-starter/internal/pubsub"
+	"github.com/loadre/learn-pub-sub-starter/internal/routing"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -26,6 +27,14 @@ func main() {
 		log.Fatalln(err)
 	}
 	fmt.Println("Connection successful.")
+
+	// func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
+	err = pubsub.PublishJSON(
+		connCh,
+		routing.ExchangePerilDirect,
+		routing.PauseKey,
+		routing.PlayingState{IsPaused: true},
+	)
 
 	// wait for ctrl+c
 	sigs := make(chan os.Signal, 1)
