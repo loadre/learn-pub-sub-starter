@@ -3,9 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
 
+	"github.com/loadre/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/loadre/learn-pub-sub-starter/internal/pubsub"
 	"github.com/loadre/learn-pub-sub-starter/internal/routing"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -13,6 +12,7 @@ import (
 
 func main() {
 	fmt.Println("Starting Peril server...")
+	gamelogic.PrintServerHelp()
 
 	url := "amqp://guest:guest@localhost:5672/"
 	conn, err := amqp.Dial(url)
@@ -28,16 +28,37 @@ func main() {
 	}
 	fmt.Println("Connection successful.")
 
-	// func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
-	err = pubsub.PublishJSON(
-		connCh,
-		routing.ExchangePerilDirect,
-		routing.PauseKey,
-		routing.PlayingState{IsPaused: true},
-	)
-
-	// wait for ctrl+c
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt)
-	<-sigs
+	for {
+		words := gamelogic.GetInput()
+		if len(words) == 0 {
+			continue
+		}
+		switch words[0] {
+		case "pause":
+			log.Println("Sending a pause message")
+			err = pubsub.PublishJSON(
+				connCh,
+				routing.ExchangePerilDirect,
+				routing.PauseKey,
+				routing.PlayingState{IsPaused: true},
+			)
+		case "resume":
+			log.Println("Sending a resume message")
+			err = pubsub.PublishJSON(
+				connCh,
+				routing.ExchangePerilDirect,
+				routing.PauseKey,
+				routing.PlayingState{IsPaused: false},
+			)
+		case "quit":
+			log.Println("Shutting down server")
+			return
+		default:
+			log.Println("I don't understand the command")
+		}
+		if err != nil {
+			log.Fatalln(err)
+			return
+		}
+	}
 }
