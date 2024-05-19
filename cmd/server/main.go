@@ -28,6 +28,14 @@ func main() {
 	}
 	fmt.Println("Connection successful.")
 
+	_, _, err = pubsub.DeclareAndBind(
+		conn,
+		routing.ExchangePerilTopic,
+		routing.GameLogSlug,
+		"game_logs.*",
+		pubsub.Durable,
+	)
+
 	for {
 		words := gamelogic.GetInput()
 		if len(words) == 0 {

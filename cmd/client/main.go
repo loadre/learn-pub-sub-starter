@@ -39,11 +39,37 @@ func main() {
 		pubsub.Transient,
 	)
 	if err != nil {
-		log.Fatalf("DeclareAndBind: %e\n", err)
+		log.Fatalf("DeclareAndBind: %v\n", err)
 		return
 	}
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt)
-	<-sigs
+	gameState := gamelogic.NewGameState(username)
+	for {
+		var err error
+		words := gamelogic.GetInput()
+		if len(words) == 0 {
+			continue
+		}
+		switch words[0] {
+		case "spawn":
+			err = gameState.CommandSpawn(words)
+		case "move":
+			_, err = gameState.CommandMove(words)
+		case "status":
+			gameState.CommandStatus()
+		case "help":
+			gamelogic.PrintClientHelp()
+		case "spam":
+			fmt.Println("Spamming not allowed yet!")
+		case "quit":
+			gamelogic.PrintQuit()
+			return
+		default:
+			// if any other command is entered,
+			// print an error message and continue the loop
+		}
+		if err != nil {
+			fmt.Printf("[ERROR]: %w", err)
+		}
+	}
 }

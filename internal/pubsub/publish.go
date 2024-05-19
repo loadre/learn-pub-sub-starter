@@ -8,7 +8,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
+func PublishJSON(ch *amqp.Channel, exchange, key string, val any) error {
 	dat, err := json.Marshal(val)
 	if err != nil {
 		return fmt.Errorf("PublishJSON: %w", err)
