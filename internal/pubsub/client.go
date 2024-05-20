@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -32,7 +33,7 @@ func DeclareAndBind(
 	exchange,
 	queueName,
 	key string,
-	simpleQueueType int, // an enum to represent "durable" or "transient"
+	simpleQueueType QueueType, // an enum to represent "durable" or "transient"
 ) (*amqp.Channel, amqp.Queue, error) {
 	ch, err := conn.Channel()
 	if err != nil {
@@ -47,13 +48,52 @@ func DeclareAndBind(
 		false,
 		nil)
 	if err != nil {
-		return nil, amqp.Queue{}, fmt.Errorf("QueueDeclare: %w", err)
+		return nil, amqp.Queue{}, fmt.Errorf("could not declare queue: %w", err)
 	}
 
-	err = ch.QueueBind(queueName, key, exchange, false, nil)
+	err = ch.QueueBind(q.Name, key, exchange, false, nil)
 	if err != nil {
-		return nil, amqp.Queue{}, fmt.Errorf("QueueBind: %w", err)
+		return nil, amqp.Queue{}, fmt.Errorf("could not bind queue: %w", err)
 	}
 
 	return ch, q, nil
+}
+
+func SubscribeJSON[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	simpleQueueType QueueType,
+	handler func(T),
+) error {
+	mqCh, q, err := DeclareAndBind(
+		conn,
+		exchange,
+		queueName,
+		key,
+		simpleQueueType)
+	if err != nil {
+		return fmt.Errorf("SubscribeJSON: %w", err)
+	}
+
+	// NOTE: empty consumer name s.t. it auto-generates one for us
+	deliveryCh, err := mqCh.Consume(
+		q.Name,
+		"",
+		false, false, false, false, nil)
+
+	go func() {
+		for delivery := range deliveryCh {
+			var dat T
+			// TODO: do we need to handle error here?
+			// NOTE: remember to pass struct as a FUCKING POINTER
+			_ = json.Unmarshal(delivery.Body, &dat)
+			handler(dat)
+			// TODO: do we need to handle error here?
+			_ = delivery.Ack(false)
+		}
+	}()
+
+	return nil
 }

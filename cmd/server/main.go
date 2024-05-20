@@ -11,10 +11,11 @@ import (
 )
 
 func main() {
+	const url = "amqp://guest:guest@localhost:5672/"
+
 	fmt.Println("Starting Peril server...")
 	gamelogic.PrintServerHelp()
 
-	url := "amqp://guest:guest@localhost:5672/"
 	conn, err := amqp.Dial(url)
 	if err != nil {
 		log.Fatalln(err)
@@ -32,9 +33,14 @@ func main() {
 		conn,
 		routing.ExchangePerilTopic,
 		routing.GameLogSlug,
-		"game_logs.*",
+		routing.GameLogSlug+".*",
 		pubsub.Durable,
 	)
+	if err != nil {
+		log.Fatalf("Could not subscrube to pause: %v:", err)
+	}
+
+	gamelogic.PrintServerHelp()
 
 	for {
 		words := gamelogic.GetInput()
@@ -43,7 +49,7 @@ func main() {
 		}
 		switch words[0] {
 		case "pause":
-			log.Println("Sending a pause message")
+			fmt.Println("Sending a pause message")
 			err = pubsub.PublishJSON(
 				connCh,
 				routing.ExchangePerilDirect,
@@ -51,7 +57,7 @@ func main() {
 				routing.PlayingState{IsPaused: true},
 			)
 		case "resume":
-			log.Println("Sending a resume message")
+			fmt.Println("Sending a resume message")
 			err = pubsub.PublishJSON(
 				connCh,
 				routing.ExchangePerilDirect,
@@ -59,10 +65,10 @@ func main() {
 				routing.PlayingState{IsPaused: false},
 			)
 		case "quit":
-			log.Println("Shutting down server")
+			fmt.Println("Shutting down server")
 			return
 		default:
-			log.Println("I don't understand the command")
+			fmt.Println("I don't understand the command")
 		}
 		if err != nil {
 			log.Fatalln(err)

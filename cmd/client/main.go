@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
 
 	"github.com/loadre/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/loadre/learn-pub-sub-starter/internal/pubsub"
@@ -25,13 +23,7 @@ func main() {
 
 	username, err := gamelogic.ClientWelcome()
 
-	/// Back in the cmd/client package, use these parameters to call DeclareAndBind:
-	///
-	///    exchange: peril_direct (this is a constant in the internal/routing package)
-	///    queueName: pause.username where username is the user's input. The pause section of the name is the routing key constant in the internal/routing package.
-	///    routingKey: pause (this is a constant in the internal/routing package)
-	///    simpleQueueType: transient
-	_, _, err = pubsub.DeclareAndBind(
+	mqCh, q, err := pubsub.DeclareAndBind(
 		conn,
 		routing.ExchangePerilDirect,
 		fmt.Sprintf("%s.%s", routing.PauseKey, username),
@@ -39,11 +31,28 @@ func main() {
 		pubsub.Transient,
 	)
 	if err != nil {
-		log.Fatalf("DeclareAndBind: %v\n", err)
+		log.Fatalf("failed to declare and bind: %v\n", err)
 		return
 	}
+	log.Printf("Queue %v declared and bound\n", q.Name)
 
-	gameState := gamelogic.NewGameState(username)
+	gs := gamelogic.NewGameState(username)
+	_ = pubsub.SubscribeJSON(
+		conn,
+		routing.ExchangePerilDirect,
+		fmt.Sprintf("pause.%s", username),
+		routing.PauseKey,
+		pubsub.Transient,
+		handlerPause(gs))
+
+	_ = pubsub.SubscribeJSON(
+		conn,
+		routing.ExchangePerilTopic,
+		routing.ArmyMovesPrefix+"."+username,
+		routing.ArmyMovesPrefix+".*",
+		pubsub.Transient,
+		handlerMove(gs))
+
 	for {
 		var err error
 		words := gamelogic.GetInput()
@@ -52,11 +61,26 @@ func main() {
 		}
 		switch words[0] {
 		case "spawn":
-			err = gameState.CommandSpawn(words)
+			err = gs.CommandSpawn(words)
 		case "move":
-			_, err = gameState.CommandMove(words)
+			var move gamelogic.ArmyMove
+			move, err = gs.CommandMove(words)
+			if err != nil {
+				fmt.Printf("%v\n", err)
+				continue
+			}
+			err = pubsub.PublishJSON(
+				mqCh,
+				routing.ExchangePerilTopic,
+				routing.ArmyMovesPrefix+"."+username,
+				move)
+			if err != nil {
+				fmt.Printf("%v\n", err)
+				continue
+			}
+			fmt.Println("Published move successfully")
 		case "status":
-			gameState.CommandStatus()
+			gs.CommandStatus()
 		case "help":
 			gamelogic.PrintClientHelp()
 		case "spam":
@@ -69,7 +93,7 @@ func main() {
 			// print an error message and continue the loop
 		}
 		if err != nil {
-			fmt.Printf("[ERROR]: %w", err)
+			fmt.Printf("%v\n", err)
 		}
 	}
 }
